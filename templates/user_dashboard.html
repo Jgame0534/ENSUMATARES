@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Mi Menú de Trabajos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container py-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Hola, {{ session['username'] }} 👋</h2>
+        <a href="/logout" class="btn btn-danger">Cerrar Sesión</a>
+    </div>
+
+    <h4 class="mb-3">Tus Trabajos Asignados</h4>
+    
+    {% if tasks %}
+        <div class="row">
+            {% for t in tasks %}
+                <div class="col-md-6 mb-4">
+                    <div class="card shadow-sm border-primary h-100">
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title text-primary">{{ t[0] }}</h5>
+                            <p class="card-text flex-grow-1">{{ t[1] }}</p>
+                            
+                            {% if t[2] %}
+                                <a href="/uploads/{{ t[2] }}" class="btn btn-outline-success mt-3" download>Descargar Archivo</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info">Aún no tienes trabajos asignados en tu cuenta. Vuelve más tarde.</div>
+    {% endif %}
+</body>
+</html>
