@@ -28,7 +28,7 @@ def init_db():
         )
     ''')
     
-    # Tabla de Tareas (Cada usuario puede tener múltiples tareas/archivos)
+    # Tabla de Tareas
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +40,7 @@ def init_db():
         )
     ''')
     
-    # Crear un Administrador por defecto si no existe
+    # Crear Administrador Maestro si no existe
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
         hashed_pw = generate_password_hash('admin123')
@@ -50,10 +50,19 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- RUTAS DE ACCESO Y LOGIN ---
+# Iniciar base de datos al arrancar
+init_db()
 
+# --- 1. RUTA PRINCIPAL (LO PRIMERO QUE VE CUALQUIERA) ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
+    # Si la persona ya inició sesión previamente, la enviamos a su pantalla correspondiente
+    if 'role' in session:
+        if session['role'] == 'admin':
+            return redirect(url_for('admin_panel'))
+        else:
+            return redirect(url_for('user_dashboard'))
+
     error = None
     if request.method == 'POST':
         username = request.form['username']
@@ -65,11 +74,13 @@ def login():
         user = cursor.fetchone()
         conn.close()
         
+        # Verificar contraseña
         if user and check_password_hash(user[1], password):
             session['user_id'] = user[0]
             session['username'] = username
             session['role'] = user[2]
             
+            # Redirección según rol
             if user[2] == 'admin':
                 return redirect(url_for('admin_panel'))
             else:
@@ -79,10 +90,10 @@ def login():
             
     return render_template('login.html', error=error)
 
-# --- PANEL DE ADMINISTRACIÓN ---
-
+# --- 2. PANEL PRIVADO DEL ADMINISTRADOR ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
+    # BLOQUEO DE SEGURIDAD: Si no es admin, no entra aquí bajo ninguna circunstancia
     if 'role' not in session or session['role'] != 'admin':
         return redirect(url_for('login'))
         
@@ -92,7 +103,7 @@ def admin_panel():
     if request.method == 'POST':
         action = request.form.get('action')
         
-        # 1. Crear nuevo usuario
+        # Crear Usuario
         if action == 'create_user':
             new_user = request.form['username']
             new_pass = generate_password_hash(request.form['password'])
@@ -101,16 +112,16 @@ def admin_panel():
                                (new_user, new_pass, 'user'))
                 conn.commit()
             except sqlite3.IntegrityError:
-                pass # El usuario ya existe
+                pass
                 
-        # 2. Borrar usuario
+        # Eliminar Usuario
         elif action == 'delete_user':
             user_id_to_delete = request.form['user_id']
             cursor.execute("DELETE FROM users WHERE id = ?", (user_id_to_delete,))
             cursor.execute("DELETE FROM tasks WHERE user_id = ?", (user_id_to_delete,))
             conn.commit()
 
-        # 3. Subir trabajo/archivo a un usuario específico
+        # Asignar Trabajo / Archivo
         elif action == 'assign_task':
             user_id = request.form['user_id']
             title = request.form['title']
@@ -126,7 +137,6 @@ def admin_panel():
                            (user_id, title, description, filename))
             conn.commit()
 
-    # Consultar datos para mostrar en la vista de admin
     cursor.execute("SELECT id, username FROM users WHERE role = 'user'")
     users = cursor.fetchall()
     
@@ -139,10 +149,10 @@ def admin_panel():
     conn.close()
     return render_template('admin_panel.html', users=users, tasks=tasks)
 
-# --- PANEL PRIVADO DEL USUARIO ---
-
+# --- 3. PANEL PRIVADO DEL USUARIO / ESTUDIANTE ---
 @app.route('/dashboard')
 def user_dashboard():
+    # BLOQUEO DE SEGURIDAD: Si no ha iniciado sesión, lo manda al login
     if 'role' not in session or session['role'] != 'user':
         return redirect(url_for('login'))
         
@@ -150,21 +160,21 @@ def user_dashboard():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     
-    # Traer solo las tareas que pertenecen a este usuario exacto
+    # Consultar SOLO los trabajos asignados a ESTE usuario
     cursor.execute("SELECT title, description, filename FROM tasks WHERE user_id = ?", (user_id,))
     my_tasks = cursor.fetchall()
     conn.close()
     
     return render_template('user_dashboard.html', tasks=my_tasks)
 
-# --- DESCARGA DE ARCHIVOS ---
-
+# --- 4. DESCARGA DE ARCHIVOS ---
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
+    if 'role' not in session:
+        return redirect(url_for('login'))
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# --- CERRAR SESIÓN ---
-
+# --- 5. CERRAR SESIÓN ---
 @app.route('/logout')
 def logout():
     session.clear()
