@@ -2,10 +2,14 @@ import os
 from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3
 
 app = Flask(__name__)
 app.secret_key = 'clave_secreta_super_segura_para_el_sistema'
+
+# ESTO SOLUCIONA EL PROBLEMA DE LAS SESIONES Y EL CIERRE DE SESIÓN EN RENDER
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -18,7 +22,6 @@ def init_db():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     
-    # Tabla de Usuarios
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,7 +31,6 @@ def init_db():
         )
     ''')
     
-    # Tabla de Tareas
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +42,6 @@ def init_db():
         )
     ''')
     
-    # Crear Administrador Maestro si no existe
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
         hashed_pw = generate_password_hash('admin123')
@@ -50,13 +51,11 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Iniciar base de datos al arrancar
 init_db()
 
-# --- 1. RUTA PRINCIPAL (LO PRIMERO QUE VE CUALQUIERA) ---
+# --- 1. RUTA PRINCIPAL (LOGIN) ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
-    # Si la persona ya inició sesión previamente, la enviamos a su pantalla correspondiente
     if 'role' in session:
         if session['role'] == 'admin':
             return redirect(url_for('admin_panel'))
@@ -74,13 +73,11 @@ def login():
         user = cursor.fetchone()
         conn.close()
         
-        # Verificar contraseña
         if user and check_password_hash(user[1], password):
             session['user_id'] = user[0]
             session['username'] = username
             session['role'] = user[2]
             
-            # Redirección según rol
             if user[2] == 'admin':
                 return redirect(url_for('admin_panel'))
             else:
@@ -90,29 +87,39 @@ def login():
             
     return render_template('login.html', error=error)
 
-# --- 2. PANEL PRIVADO DEL ADMINISTRADOR ---
+# --- 2. PANEL DE ADMINISTRADOR ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
-    # BLOQUEO DE SEGURIDAD: Si no es admin, no entra aquí bajo ninguna circunstancia
     if 'role' not in session or session['role'] != 'admin':
         return redirect(url_for('login'))
         
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
+    message = None
+    msg_type = "success"
     
     if request.method == 'POST':
         action = request.form.get('action')
         
-        # Crear Usuario
+        # Crear Usuario con aviso si ya existe
         if action == 'create_user':
             new_user = request.form['username']
-            new_pass = generate_password_hash(request.form['password'])
-            try:
-                cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
-                               (new_user, new_pass, 'user'))
-                conn.commit()
-            except sqlite3.IntegrityError:
-                pass
+            new_pass = request.form['password']
+            
+            if not new_user.strip() or not new_pass.strip():
+                message = "El usuario y la contraseña no pueden estar vacíos."
+                msg_type = "danger"
+            else:
+                hashed_pass = generate_password_hash(new_pass)
+                try:
+                    cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
+                                   (new_user, hashed_pass, 'user'))
+                    conn.commit()
+                    message = f"¡Usuario '{new_user}' creado con éxito!"
+                    msg_type = "success"
+                except sqlite3.IntegrityError:
+                    message = f"¡Error! El usuario '{new_user}' ya existe. Prueba con otro nombre."
+                    msg_type = "danger"
                 
         # Eliminar Usuario
         elif action == 'delete_user':
@@ -120,6 +127,8 @@ def admin_panel():
             cursor.execute("DELETE FROM users WHERE id = ?", (user_id_to_delete,))
             cursor.execute("DELETE FROM tasks WHERE user_id = ?", (user_id_to_delete,))
             conn.commit()
+            message = "Usuario eliminado correctamente."
+            msg_type = "warning"
 
         # Asignar Trabajo / Archivo
         elif action == 'assign_task':
@@ -136,6 +145,8 @@ def admin_panel():
             cursor.execute("INSERT INTO tasks (user_id, title, description, filename) VALUES (?, ?, ?, ?)",
                            (user_id, title, description, filename))
             conn.commit()
+            message = "¡Trabajo asignado con éxito!"
+            msg_type = "success"
 
     cursor.execute("SELECT id, username FROM users WHERE role = 'user'")
     users = cursor.fetchall()
@@ -147,20 +158,17 @@ def admin_panel():
     tasks = cursor.fetchall()
     
     conn.close()
-    return render_template('admin_panel.html', users=users, tasks=tasks)
+    return render_template('admin_panel.html', users=users, tasks=tasks, message=message, msg_type=msg_type)
 
-# --- 3. PANEL PRIVADO DEL USUARIO / ESTUDIANTE ---
+# --- 3. PANEL DE USUARIO ---
 @app.route('/dashboard')
 def user_dashboard():
-    # BLOQUEO DE SEGURIDAD: Si no ha iniciado sesión, lo manda al login
     if 'role' not in session or session['role'] != 'user':
         return redirect(url_for('login'))
         
     user_id = session['user_id']
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
-    
-    # Consultar SOLO los trabajos asignados a ESTE usuario
     cursor.execute("SELECT title, description, filename FROM tasks WHERE user_id = ?", (user_id,))
     my_tasks = cursor.fetchall()
     conn.close()

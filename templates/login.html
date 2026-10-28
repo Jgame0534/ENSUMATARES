@@ -2,77 +2,26 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Administración</title>
+    <title>Acceso al Sistema</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body class="container py-5">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Panel de Administrador</h2>
-        <a href="/logout" class="btn btn-danger">Cerrar Sesión</a>
-    </div>
-
-    <div class="row">
-        <!-- 1. Crear Usuario -->
-        <div class="col-md-4 card p-4 shadow-sm mb-4">
-            <h4 class="mb-3">Crear Usuario</h4>
-            <form method="POST">
-                <input type="hidden" name="action" value="create_user">
-                <div class="mb-3">
-                    <label class="form-label">Nombre de Usuario:</label>
-                    <input type="text" name="username" class="form-control" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Contraseña:</label>
-                    <input type="password" name="password" class="form-control" required>
-                </div>
-                <button type="submit" class="btn btn-success w-100">Registrar Usuario</button>
-            </form>
-
-            <hr class="my-4">
-
-            <h4 class="mb-3">Eliminar Usuario</h4>
-            <form method="POST">
-                <input type="hidden" name="action" value="delete_user">
-                <div class="mb-3">
-                    <label class="form-label">Seleccionar Usuario a Borrar:</label>
-                    <select name="user_id" class="form-select" required>
-                        {% for u in users %}
-                            <option value="{{ u[0] }}">{{ u[1] }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-outline-danger w-100">Eliminar Cuenta</button>
-            </form>
-        </div>
-
-        <!-- 2. Subir Múltiples Trabajos / Archivos -->
-        <div class="col-md-8 card p-4 shadow-sm mb-4">
-            <h4 class="mb-3">Asignar Trabajo o Archivo a Usuario</h4>
-            <form method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="action" value="assign_task">
-                <div class="mb-3">
-                    <label class="form-label">Elegir Usuario:</label>
-                    <select name="user_id" class="form-select" required>
-                        {% for u in users %}
-                            <option value="{{ u[0] }}">{{ u[1] }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Título del Trabajo (Ej: Trabajo #1, Tarea de Lectura...):</label>
-                    <input type="text" name="title" class="form-control" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Instrucciones o Descripción:</label>
-                    <textarea name="description" class="form-control" rows="2"></textarea>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Archivo adjunto:</label>
-                    <input type="file" name="file" class="form-control" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-100">Subir Trabajo</button>
-            </form>
-        </div>
+<body class="bg-light d-flex align-items-center justify-content-center vh-100">
+    <div class="card p-4 shadow" style="width: 380px;">
+        <h3 class="text-center mb-4">Iniciar Sesión</h3>
+        {% if error %}
+            <div class="alert alert-danger p-2 text-center">{{ error }}</div>
+        {% endif %}
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">Usuario:</label>
+                <input type="text" name="username" class="form-control" required autocomplete="off">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Contraseña:</label>
+                <input type="password" name="password" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Entrar</button>
+        </form>
     </div>
 </body>
 </html>
